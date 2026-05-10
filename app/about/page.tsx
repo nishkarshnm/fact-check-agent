@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { ArrowLeft, Brain, Globe, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -28,6 +29,7 @@ export default function AboutPage() {
             <ArrowLeft className="w-4 h-4" />
             Back Home
           </Button>
+          <ThemeToggle />
         </div>
       </nav>
 

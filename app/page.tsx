@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileUpload } from '@/components/upload-ui';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -56,6 +57,7 @@ export default function Home() {
             <Link href="/about">
               <Button variant="ghost">About</Button>
             </Link>
+            <ThemeToggle />
           </div>
         </div>
       </nav>

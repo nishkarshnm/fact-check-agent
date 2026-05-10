@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { VerificationCard } from '@/components/upload-ui';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { ArrowLeft, Download, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -93,6 +94,7 @@ export default function ResultsPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Upload
           </Button>
+          <ThemeToggle />
         </div>
       </nav>
 
