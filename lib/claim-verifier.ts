@@ -1,5 +1,4 @@
 import { OpenAI } from 'openai';
-import axios from 'axios';
 
 export type VerificationStatus = 'VERIFIED' | 'INACCURATE' | 'FALSE' | 'UNVERIFIABLE' | 'PENDING';
 
@@ -17,94 +16,71 @@ function getOpenAIClient() {
   });
 }
 
-async function searchWeb(query: string): Promise<string[]> {
-  try {
-    // Using Exa API for web search
-    const response = await axios.post(
-      'https://api.exa.ai/search',
-      {
-        query,
-        numResults: 5,
-        useAutoprompt: true,
-      },
-      {
-        headers: {
-          'x-api-key': process.env.EXA_API_KEY,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    return response.data.results
-      .map((r: any) => `${r.title}: ${r.text}`)
-      .slice(0, 3);
-  } catch (error) {
-    console.warn('[v0] Web search failed:', error);
-    return [];
-  }
-}
-
 export async function verifyClaimWithAI(
   claim: string,
   context: string
 ): Promise<VerificationResult> {
   try {
     const client = getOpenAIClient();
-    // Search the web for evidence
-    const searchResults = await searchWeb(claim);
-    const evidenceText = searchResults.join('\n\n');
 
-    const message = await client.messages.create({
-      model: 'gpt-4-turbo-preview',
+    const message = await client.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      temperature: 0.5,
       max_tokens: 1500,
       messages: [
         {
+          role: 'system',
+          content: `You are an expert fact-checking AI. Your job is to evaluate claims and determine their accuracy based on your knowledge.
+          
+For each claim, you should:
+1. Assess its factual accuracy
+2. Provide a confidence score (0-1)
+3. Give key evidence or reasoning
+4. Provide a clear summary
+
+Return responses ONLY as valid JSON with no additional text.`,
+        },
+        {
           role: 'user',
-          content: `You are a fact-checking AI. Verify the following claim based on the search results provided.
+          content: `Please verify this claim and return a JSON response.
 
 CLAIM: "${claim}"
 
-CONTEXT: "${context}"
+CONTEXT/SOURCE: "${context}"
 
-SEARCH RESULTS:
-${evidenceText || 'No search results found'}
-
-Respond with a JSON object containing:
+Respond with this JSON structure (no markdown, just raw JSON):
 {
   "status": "VERIFIED" | "INACCURATE" | "FALSE" | "UNVERIFIABLE",
-  "confidence": 0-1,
-  "summary": "2-3 sentence explanation",
-  "evidence": ["key evidence points"]
-}
-
-Return ONLY valid JSON, no other text.`,
+  "confidence": 0.0-1.0,
+  "summary": "2-3 sentence explanation of the verification result",
+  "evidence": ["key point 1", "key point 2", "key point 3"]
+}`,
         },
       ],
     });
 
-    const responseText =
-      message.content[0].type === 'text' ? message.content[0].text : '';
+    const responseText = message.choices[0]?.message?.content || '';
+    console.log('[v0] OpenAI Response:', responseText);
 
-    try {
-      const result = JSON.parse(responseText);
-      return {
-        claimId: '',
-        status: result.status || 'UNVERIFIABLE',
-        confidence: result.confidence || 0.5,
-        evidence: result.evidence || searchResults,
-        summary: result.summary || 'Unable to verify claim',
-      };
-    } catch {
-      console.error('[v0] Failed to parse verification JSON:', responseText);
-      return {
-        claimId: '',
-        status: 'UNVERIFIABLE',
-        confidence: 0,
-        evidence: searchResults,
-        summary: 'Failed to process verification',
-      };
+    // Extract JSON from response (handle potential markdown code blocks)
+    let jsonStr = responseText;
+    if (responseText.includes('```json')) {
+      jsonStr = responseText.split('```json')[1].split('```')[0];
+    } else if (responseText.includes('```')) {
+      jsonStr = responseText.split('```')[1].split('```')[0];
     }
+
+    const result = JSON.parse(jsonStr.trim());
+
+    return {
+      claimId: '',
+      status: result.status || 'UNVERIFIABLE',
+      confidence: Math.min(1, Math.max(0, result.confidence || 0.5)),
+      evidence: Array.isArray(result.evidence) ? result.evidence : ['Unable to extract evidence'],
+      summary: result.summary || 'Verification completed',
+    };
   } catch (error) {
+    console.error('[v0] Verification Error:', error);
     throw new Error(`Failed to verify claim: ${error}`);
   }
 }

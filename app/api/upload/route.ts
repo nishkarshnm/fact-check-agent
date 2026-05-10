@@ -5,8 +5,8 @@ import { verifyClaimWithAI } from '@/lib/claim-verifier';
 
 export const maxDuration = 60;
 
-// Demo mode - returns mock data when API keys are not configured
-const DEMO_MODE = !process.env.OPENAI_API_KEY || !process.env.EXA_API_KEY;
+// Only check if OpenAI key is available (no longer need Exa)
+const DEMO_MODE = !process.env.OPENAI_API_KEY;
 
 const DEMO_RESULTS = [
   {
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     if (DEMO_MODE) {
       // Return demo results without API calls
-      console.log('[v0] Running in DEMO MODE - no API keys configured');
+      console.log('[v0] Running in DEMO MODE - OPENAI_API_KEY not configured');
       return NextResponse.json({
         fileName: file.name,
         pageCount: 5,
@@ -103,39 +103,59 @@ export async function POST(request: NextRequest) {
         ],
         verifications: DEMO_RESULTS,
         demoMode: true,
-        message: 'Demo results shown. Add OPENAI_API_KEY and EXA_API_KEY to .env.local for real verification'
+        message: 'Demo results shown. Add OPENAI_API_KEY to .env.local for real verification'
       });
     }
 
-    // Real mode - requires API keys
+    // Real mode - with actual OpenAI processing
+    console.log('[v0] Real mode - processing with OpenAI API');
+    
     try {
+      // Extract claims from text
+      console.log('[v0] Extracting claims from PDF text...');
       const claims = await extractClaimsFromText(extraction.text);
+      console.log('[v0] Found', claims.length, 'claims');
 
-      const verificationPromises = claims.map((claim) =>
+      if (claims.length === 0) {
+        return NextResponse.json(
+          { error: 'No verifiable claims found in document' },
+          { status: 400 }
+        );
+      }
+
+      // Verify each claim with error handling
+      console.log('[v0] Verifying', claims.length, 'claims...');
+      const verificationPromises = claims.map((claim, index) =>
         verifyClaimWithAI(claim.text, claim.context)
           .then((result) => ({
             ...result,
             claimId: claim.id,
           }))
-          .catch(() => ({
-            claimId: claim.id,
-            status: 'UNVERIFIABLE' as const,
-            confidence: 0,
-            evidence: [],
-            summary: 'Verification failed',
-          }))
+          .catch((error) => {
+            console.error(`[v0] Error verifying claim ${index}:`, error);
+            return {
+              claimId: claim.id,
+              status: 'UNVERIFIABLE' as const,
+              confidence: 0,
+              evidence: ['Verification failed'],
+              summary: 'Unable to verify this claim at this time',
+            };
+          })
       );
 
       const verifications = await Promise.all(verificationPromises);
 
       return NextResponse.json({
         success: true,
+        fileName: file.name,
         claims,
         verifications,
         documentInfo: {
           pageCount: extraction.pageCount,
           claimCount: claims.length,
+          textLength: extraction.text.length,
         },
+        demoMode: false,
       });
     } catch (error) {
       console.error('[v0] API Error:', error);

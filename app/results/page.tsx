@@ -6,6 +6,7 @@ import { VerificationCard } from '@/components/upload-ui';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { StatsDisplay } from '@/components/stats-display';
 import { ArrowLeft, Download, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 

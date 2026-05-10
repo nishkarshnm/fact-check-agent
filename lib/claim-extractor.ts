@@ -16,33 +16,53 @@ function getOpenAIClient() {
 export async function extractClaimsFromText(text: string): Promise<Claim[]> {
   try {
     const client = getOpenAIClient();
-    const message = await client.messages.create({
-      model: 'gpt-4-turbo-preview',
+    const message = await client.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      temperature: 0.3,
       max_tokens: 2000,
       messages: [
         {
-          role: 'user',
-          content: `Extract the main factual claims from the following text. Return a JSON array with objects containing: id (unique identifier), text (the claim), context (surrounding context), and confidence (0-1 how confident this is a verifiable claim).
+          role: 'system',
+          content: `You are an expert at identifying factual claims in text. Extract the main verifiable claims (facts, statistics, assertions) from the provided text. 
+          
+Focus on claims that are:
+- Factually verifiable
+- Specific and concrete
+- Important to the document
+- Not just opinions
 
-Text:
+Return ONLY a JSON array with no markdown code blocks or additional text.`,
+        },
+        {
+          role: 'user',
+          content: `Extract the main factual claims from this text:
+
 ${text}
 
-Return ONLY valid JSON array, no other text.`,
+Return a JSON array like this (no markdown, no code blocks, just raw JSON):
+[
+  {"id": "claim-1", "text": "the claim", "context": "surrounding context", "confidence": 0.9},
+  {"id": "claim-2", "text": "another claim", "context": "context", "confidence": 0.85}
+]`,
         },
       ],
     });
 
-    const responseText =
-      message.content[0].type === 'text' ? message.content[0].text : '';
+    const responseText = message.choices[0]?.message?.content || '';
+    console.log('[v0] Claims extracted:', responseText.substring(0, 200));
 
-    try {
-      const claims = JSON.parse(responseText);
-      return Array.isArray(claims) ? claims : [];
-    } catch {
-      console.error('[v0] Failed to parse claims JSON:', responseText);
-      return [];
+    // Extract JSON from response (handle potential markdown code blocks)
+    let jsonStr = responseText;
+    if (responseText.includes('```json')) {
+      jsonStr = responseText.split('```json')[1].split('```')[0];
+    } else if (responseText.includes('```')) {
+      jsonStr = responseText.split('```')[1].split('```')[0];
     }
+
+    const claims = JSON.parse(jsonStr.trim());
+    return Array.isArray(claims) ? claims.slice(0, 10) : [];
   } catch (error) {
+    console.error('[v0] Failed to extract claims:', error);
     throw new Error(`Failed to extract claims: ${error}`);
   }
 }
